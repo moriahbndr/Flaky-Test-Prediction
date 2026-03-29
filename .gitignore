@@ -1,0 +1,19 @@
+#Virtual environment
+venv/
+.venv/
+
+#Cache (Python)
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+
+#Environment
+.env
+
+#Jupyter & VSCode
+.ipynb_checkpoints/
+.vscode/
+
+#Mac system 
+.DS_Store
