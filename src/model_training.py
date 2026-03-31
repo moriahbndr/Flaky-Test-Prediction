@@ -163,7 +163,7 @@ print("Saved plotted graph to: results/figures/calibration_curve.png")
 
 xgb_model = pipe["clf"]
 
-plt.figure(figsize=(10, 8))
+plt.figure(figsize=(10, 10))
 plot_importance(xgb_model)
 plt.tight_layout()
 plt.savefig("results/figures/xgb_feature_importance.png") #source: https://xgboost.readthedocs.io/en/stable/python/python_api.html#module-xgboost.plotting
