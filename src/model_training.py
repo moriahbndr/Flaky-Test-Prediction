@@ -36,11 +36,11 @@ else:
 xgb_model = XGBClassifier(
     objective="binary:logistic",
     eval_metric="logloss",
-    n_estimators=150,
-    max_depth=4,
     learning_rate=0.08,
-    subsample=0.9,
-    colsample_bytree=0.9,
+    subsample=0.75,
+    colsample_bytree=0.75,
+    n_estimators=250,
+    max_depth=3,
     scale_pos_weight=imbalanced_weight,
     random_state=7
 )
@@ -53,15 +53,13 @@ y_prob = xgb_model.predict_proba(X_test)[:,1]
 threshold = 0.40
 y_pred = (y_prob >= threshold).astype(int)
 
-precision = precision_score(y_test, y_pred, zero_division=0)
-recall = recall_score(y_test, y_pred, zero_division=0)
-f1 = f1_score(y_test, y_pred, zero_division=0)
-matrix = confusion_matrix(y_test, y_pred)
+precision = precision_score(y_test, y_pred, zero_division=0)        # showing how many actual flaky tests out of all predicted flaky tests
+recall = recall_score(y_test, y_pred, zero_division=0)              # how many flaky tests did the model catch from the true flaky tests
+f1 = f1_score(y_test, y_pred, zero_division=0)                      # combined score that balances precision and recall
+matrix = confusion_matrix(y_test, y_pred)                           # true positives and negatives , and false positives and negatives shown
 
-print("Threshold:",threshold)
-print("Precision:", precision)
-print("Recall:", recall)
-print("F1:", f1)
+print("Threshold:",threshold, " Precision: ", precision)
+print("Recall:", recall, "F1: ", f1)
 print("Confusion Matrix:")
 print(matrix)
 
