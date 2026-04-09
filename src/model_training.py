@@ -18,6 +18,8 @@ from sklearn.metrics import (brier_score_loss, precision_score, recall_score, f1
 # --------------------------------------------------------- #
 df = pd.read_csv("data/processed/full_features.csv")
 
+# ------- TODO: add the new created dataset that contains only the NumFailingRuns from FlakeFlagger dataset
+
 # focusing on isFlaky, ignoring else
 target = "IsFlaky"
 ignore_cols = ["Project", "Test", target]
@@ -59,9 +61,9 @@ pipe.fit(X_train, y_train)
 
 
 # ----------- #
-# Prediction  #
+# Prediction  # TODO: finalize and decide on threshold value #
 # ----------- #
-threshold = .99 # started from .4 and the results stayed the same from .4 - .99
+threshold = .99 # started from .4 and the results stayed the same from .4 - .99 
 y_prob = pipe.predict_proba(X_test)[:, 1]
 y_pred = (y_prob >= threshold).astype(int)
 

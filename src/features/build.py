@@ -7,6 +7,7 @@
 
 import pandas as pd
 import os
+# TODO: attempt to locate and assign the FirstFailingRunID from the FlakeFlagger dataset (located in flakeflagger_results.csv)
 
 # pandas DataFrame taking FlakeFlagger dataset, making sure column names will be taken as string
 df = pd.read_csv("data/input_data/flakeflagger_results.csv")
@@ -19,15 +20,25 @@ numeric_cols = [
     "IsFlaky", "NumFailingRuns", "NumPassingRuns", "FirstFailingRunID", "FirstPassingRunID","UniqueFailingExceptionTypes"
 ]
 
+
 # looping each column and converting to numeric
 # errors = "coerce" is needed to transform any potential bad values and avoid failures
 for col in numeric_cols:
     df[col] = pd.to_numeric(df[col], errors = "coerce")
 
-# -------- Static Features --------- #
+
 #splitting into class or function first
 df["Class"] = df["Test"].apply(lambda x: x.split("#")[0] if "#" in x else x)
 df["Function"] = df["Test"].apply(lambda x: x.split("#")[1] if "#" in x else "")
+
+# TODO: add to and save to new folder and add a seperate test case/area file
+# -------- Consolidating and Filtering Data to only retrieve (NumFailingRuns > 0) --------- #
+filtered_df = df[df["NumFailingRuns"] > 0]
+#print("\n\nNumOfFailingRuns new data: \n", filtered_df)
+print("\n\nNumOfFailingRuns new data: \n", filtered_df[numeric_cols])
+
+
+# -------- Static Features --------- #
 
 #Function and Class name length
 df["ClassNameLength"] = df["Class"].apply(len)
