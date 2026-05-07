@@ -31,11 +31,21 @@ for col in numeric_cols:
 df["Class"] = df["Test"].apply(lambda x: x.split("#")[0] if "#" in x else x)
 df["Function"] = df["Test"].apply(lambda x: x.split("#")[1] if "#" in x else "")
 
-# TODO: add to and save to new folder and add a seperate test case/area file
-# -------- Consolidating and Filtering Data to only retrieve (NumFailingRuns > 0) --------- #
+###############################################################################################################
+## --------------- filtering the flake flagger dataset to potentially correct perfect scores --------------- ##
+###############################################################################################################
+#   filtered_df .... only stores data from any test that had at least 1 failing run (NumFailingRuns > 0)
+#   TODO: add to and save to a new folder and add a seperate test case/area file 
+
 filtered_df = df[df["NumFailingRuns"] > 0]
-#print("\n\nNumOfFailingRuns new data: \n", filtered_df)
+print("\n\nNumOfFailingRuns new data: \n", filtered_df)
 print("\n\nNumOfFailingRuns new data: \n", filtered_df[numeric_cols])
+# df = filtered_df   # TODO: comment and uncomment to apply the filtered tests
+
+
+###############################################################################################################
+##  end of filtered dataset  ##
+###############################################################################################################
 
 
 # -------- Static Features --------- #
