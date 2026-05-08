@@ -58,7 +58,7 @@ df["FunctionNameLength"] = df["Function"].apply(len)
 df["PackageLength"] = df["Class"].apply(lambda x: x.count("."))
 
 # -- keywords in function names -- # 
-# moriah - I might have missed a few keywords for each, if so, feel free to add
+
 
 df["SleepOrWaitInFunction"] = df["Function"].apply(
     lambda x: 1 if any(word in x.lower() for word in ["sleep", "wait", "delay", "timeout"]) else 0)

@@ -4,7 +4,6 @@ venv/
 
 #Local cache
 data/source_cache/
-.claude/
 
 #Cache (Python)
 __pycache__/
@@ -19,5 +18,8 @@ __pycache__/
 .ipynb_checkpoints/
 .vscode/
 
-#Mac system 
+#Mac system
 .DS_Store
+
+#Claude Code
+.claude/
