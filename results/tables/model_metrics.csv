@@ -1,2 +1,5 @@
-Threshold,Precision,Recall,F1,TrueNegatives,FalsePositives,FalseNegatives,TruePositives,MisclassificationCost,BrierScore
-0.99,1.0,1.0,1.0,5358,0,0,203,0,1.7755037347010774e-05
+Experiment,Threshold,Precision,Recall,F1,TrueNegatives,FalsePositives,FalseNegatives,TruePositives,MisclassificationCost,BrierScore
+flakeflagger_raw,0.99,1.0,1.0,1.0,5358,0,0,203,0,1.0828134556039576e-05
+static_only,0.99,0.8571428571428571,0.029556650246305417,0.05714285714285714,5357,1,197,6,395,0.028273966502409913
+static_plus_bounded,0.99,0.95,0.8423645320197044,0.8929503916449086,5349,9,32,171,73,0.003983314471326751
+flakeflagger_static,0.75,0.15671641791044777,0.41379310344827586,0.2273342354533153,4906,452,119,84,690,0.033351769688050495

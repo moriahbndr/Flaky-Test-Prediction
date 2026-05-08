@@ -2,6 +2,10 @@
 venv/
 .venv/
 
+#Local cache
+data/source_cache/
+.claude/
+
 #Cache (Python)
 __pycache__/
 *.pyc
