@@ -14,7 +14,7 @@ from sklearn.metrics import (brier_score_loss, precision_score, recall_score, f1
 
 
 # load the processed dataset that build_flakeflagger.py created
-df = pd.read_csv("data/processed/full_features_v2.csv")
+df = pd.read_csv("data/processed/full_features.csv")
 
 # if build_smells.py has been run, pull in the smell features and merge them in
 ff_path = "data/processed/flakeflagger_features.csv"

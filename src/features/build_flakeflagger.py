@@ -1,6 +1,6 @@
 ###############################################################################################################
 # Feature extraction from the FlakeFlagger dataset.
-# Output: data/processed/full_features_v2.csv
+# Output: data/processed/full_features.csv
 #
 # Static features  — derivable from test/class/package name alone
 # Lightweight dynamic features — derived from existing FlakeFlagger run-outcome columns
@@ -97,9 +97,9 @@ final_cols = [
 df = df[final_cols].dropna()
 
 os.makedirs("data/processed", exist_ok=True)
-df.to_csv("data/processed/full_features_v2.csv", index=False)
+df.to_csv("data/processed/full_features.csv", index=False)
 
-print("Saved to: data/processed/full_features_v2.csv")
+print("Saved to: data/processed/full_features.csv")
 print("Shape:", df.shape)
 print("\nFeature count:", len(final_cols) - 3, "(excluding Project, Test, IsFlaky)")
 print("\nSample:")
