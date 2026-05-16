@@ -1,8 +1,9 @@
 ###############################################################################################################
 # Pipeline entry point — runs the full project in order:
-#   1. src/features/build_flakeflagger.py — extract static + lightweight dynamic features
-#   2. src/features/build_smells.py  — fetch Java source and extract test-smell features (smell_only baseline)
-#   3. src/model_training.py       — train all experiments and compare against smell_only baseline
+#   1. src/features/build/build_flakeflagger.py — extract static + lightweight dynamic features
+#   2. src/features/build/build_smells.py       — fetch Java source and extract test-smell features (smell_only baseline)
+#   3. src/features/build/build_idflakies.py    — extract static features from iDFlakies
+#   4. src/model_training.py                    — train all experiments and compare against smell_only baseline
 #
 # Run from the project root:
 #   python main.py
@@ -13,9 +14,9 @@ import sys
 import os
 
 STEPS = [
-    ("Feature extraction (FlakeFlagger)", "src/features/build_flakeflagger.py"),
-    ("Smell feature extraction",          "src/features/build_smells.py"),
-    ("iDFlakies feature extraction",      "src/features/build_idflakies.py"),
+    ("Feature extraction (FlakeFlagger)", "src/features/build/build_flakeflagger.py"),
+    ("Smell feature extraction",          "src/features/build/build_smells.py"),
+    ("iDFlakies feature extraction",      "src/features/build/build_idflakies.py"),
     ("Model training + comparison",       "src/model_training.py"),
 ]
 

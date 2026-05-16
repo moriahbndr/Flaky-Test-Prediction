@@ -50,12 +50,15 @@ results/
 
 src/
     features/
-        static_features.py     (shared keyword/feature logic used by both build scripts)
-        build_flakeflagger.py  (extracts static + lightweight dynamic features from FlakeFlagger)
-        build_smells.py        (fetches Java source from GitHub and extracts test smell features)
-        build_idflakies.py     (extracts static features from iDFlakies for cross-project eval)
+        build/
+            build_flakeflagger.py  (extracts static + lightweight dynamic features from FlakeFlagger)
+            build_smells.py        (fetches Java source from GitHub and extracts test smell features)
+            build_idflakies.py     (extracts static features from iDFlakies for cross-project eval)
+            static_features.py     (shared keyword/feature logic used by all build scripts)
+        experiment_sets/
+            feature_sets.py        (defines all feature column lists and experiment configurations)
 
-    data_check.py      (can be used for checking data outputs but project nevver calls this file for use)
+    data_check.py      (can be used for checking data outputs but project never calls this file for use)
     model_training.py  (trains all experiments and runs cross-project evaluation on iDFlakies)
 
 main.py       (runs the full pipeline in order, just run this)
@@ -70,10 +73,10 @@ run main.py from the project root and it handles everything in order:
     python main.py  (or python3 main.py on mac)
 
 it runs these steps automatically:
-1. src/features/build_flakeflagger.py  — builds features from the FlakeFlagger dataset
-2. src/features/build_smells.py        — fetches Java source files and extracts smell features (takes a while the first time, cached after)
-3. src/features/build_idflakies.py     — builds static features from the iDFlakies dataset
-4. src/model_training.py               — trains all experiments and evaluates on both datasets
+1. src/features/build/build_flakeflagger.py  — builds features from the FlakeFlagger dataset
+2. src/features/build/build_smells.py        — fetches Java source files and extracts smell features (takes a while the first time, cached after)
+3. src/features/build/build_idflakies.py     — builds static features from the iDFlakies dataset
+4. src/model_training.py                     — trains all experiments and evaluates on both datasets
 
 if a step fails it will stop and print out which one
 
