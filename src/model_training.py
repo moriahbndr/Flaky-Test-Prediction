@@ -5,7 +5,11 @@ import pandas as pd
 from xgboost import XGBClassifier, plot_importance
 import joblib
 import os
+import sys
 import matplotlib.pyplot as plt
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "features", "experiment_sets"))
+from feature_sets import FF_SMELL_COLS, FF_CHURN_COLS, build_feature_sets
 
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
@@ -26,63 +30,15 @@ if os.path.exists(ff_path):
 target = "IsFlaky"
 ignore_cols = ["Project", "Test", target]
 
-# experiments:
-#   flakeflagger_raw       - uses the raw run history columns, this is basically cheating
-#                            since the data already tells you if it failed. good upper bound though
-#   smell_only             - just the test smell features from the java source code
-#   static_v2              - only name-based features, no run history at all
-#   static_v2_plus_dynamic - name features + some derived run stats (still leaky but useful to see)
-#   flakeflagger_static    - smell features + churn, this is the FlakeFlagger paper's approach
+# experiments are defined in src/features/feature_sets.py
+# smell_only and flakeflagger_static are only included when build_smells.py has been run first
+available_smell_cols = [c for c in FF_SMELL_COLS if c in df.columns and df[c].notna().any()]
+available_churn_cols = [c for c in FF_CHURN_COLS if c in df.columns and df[c].notna().any()]
+FEATURE_SETS = build_feature_sets(available_smell_cols, available_churn_cols)
 
-_static = [
-    "FunctionNameLength", "FunctionWordCount", "FunctionHasDigits",
-    "ClassNameLength", "PackageLength",
-    "SleepOrWaitInFunction", "AsyncInFunction", "TimeOrRandomInFunction",
-    "NetworkInFunction", "FileIOInFunction", "DatabaseInFunction",
-    "UIBrowserInFunction", "RetryFlakeInFunction",
-    "SleepOrWaitInClass", "AsyncInClass", "TimeOrRandomInClass",
-    "NetworkInClass", "FileIOInClass", "DatabaseInClass", "UIBrowserInClass",
-    "NetworkInPackage", "FileIOInPackage", "DatabaseInPackage", "UIBrowserInPackage",
-]
-_ff_smell_cols = [
-    "assertion_roulette", "conditional_test_logic", "eager_test",
-    "fire_and_forget", "indirect_testing", "mystery_guest",
-    "resource_optimism", "test_run_war",
-    "num_asserts", "test_length",
-]
-_ff_churn_cols = [
-    "file_churn_window_5", "file_churn_window_10", "file_churn_window_25",
-    "file_churn_window_50", "file_churn_window_75", "file_churn_window_100",
-]
-
-FEATURE_SETS = {
-    "flakeflagger_raw": [
-        "NumFailingRuns", "NumPassingRuns",
-        "FirstFailingRunID", "FirstPassingRunID",
-        "UniqueFailingExceptionTypes",
-    ],
-    "smell_only": [],          # filled in below once available smell cols are confirmed
-    "static_v2": _static,
-    "static_v2_plus_dynamic": _static + [
-        "TotalRuns", "FailRatio", "PassRatio",
-        "AnyFailures", "AnyPassingRuns",
-        "BothPassAndFail", "AlwaysFails",
-        "FailOnFirstRun", "EarlyFailure",
-        "ExceptionDiversityRatio",
-    ],
-}
-
-# only add smell-based experiments if build_smells.py has been run first
-# if the churn columns are also there, include those too
-available_smell_cols = [c for c in _ff_smell_cols if c in df.columns and df[c].notna().any()]
-available_churn_cols = [c for c in _ff_churn_cols if c in df.columns and df[c].notna().any()]
 if available_smell_cols:
-    FEATURE_SETS["smell_only"] = available_smell_cols          # <-- pure baseline
-    ff_cols = available_smell_cols + available_churn_cols
-    FEATURE_SETS["flakeflagger_static"] = ff_cols              # smells + churn (existing)
     print(f"Smell features available ({len(available_smell_cols)}) — smell_only baseline enabled.")
 else:
-    del FEATURE_SETS["smell_only"]
     print("No smell features found — run src/features/build_smells.py first.")
 print("Dataset shape:", df.shape)
 
