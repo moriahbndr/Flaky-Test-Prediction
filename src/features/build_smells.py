@@ -3,7 +3,7 @@
 #
 # Source: the FlakeFlagger repo already contains each test method as an individual .java file under
 #   flakiness-predicter/input_data/original_tests/{project}/{flakyMethods|nonFlakyMethods}/
-# We fetch those files directly from raw.githubusercontent.com — no GitHub token required.
+#   fetched those files directly from raw.githubusercontent.com — no GitHub token required.
 #
 # Features extracted (mirrors FlakeFlaggerFeaturesTypes.csv static column):
 #   assertion_roulette, conditional_test_logic, eager_test, fire_and_forget,
