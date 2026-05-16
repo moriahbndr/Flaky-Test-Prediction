@@ -26,7 +26,7 @@ if os.path.exists(ff_path):
 target = "IsFlaky"
 ignore_cols = ["Project", "Test", target]
 
-# these are the different experiments we're running:
+# experiments:
 #   flakeflagger_raw       - uses the raw run history columns, this is basically cheating
 #                            since the data already tells you if it failed. good upper bound though
 #   smell_only             - just the test smell features from the java source code
@@ -35,7 +35,8 @@ ignore_cols = ["Project", "Test", target]
 #   flakeflagger_static    - smell features + churn, this is the FlakeFlagger paper's approach
 
 _static = [
-    "FunctionNameLength", "ClassNameLength", "PackageLength",
+    "FunctionNameLength", "FunctionWordCount", "FunctionHasDigits",
+    "ClassNameLength", "PackageLength",
     "SleepOrWaitInFunction", "AsyncInFunction", "TimeOrRandomInFunction",
     "NetworkInFunction", "FileIOInFunction", "DatabaseInFunction",
     "UIBrowserInFunction", "RetryFlakeInFunction",
@@ -60,7 +61,7 @@ FEATURE_SETS = {
         "FirstFailingRunID", "FirstPassingRunID",
         "UniqueFailingExceptionTypes",
     ],
-    "smell_only": [],          # filled in below once we know which smell cols are available
+    "smell_only": [],          # filled in below once available smell cols are confirmed
     "static_v2": _static,
     "static_v2_plus_dynamic": _static + [
         "TotalRuns", "FailRatio", "PassRatio",
@@ -109,7 +110,8 @@ os.makedirs("results/models", exist_ok=True)
 os.makedirs("results/figures", exist_ok=True)
 
 all_metrics = []
-trained_pipes = {}   # keeping each trained model so we can reuse them for the iDFlakies eval
+trained_pipes = {}      # each trained model is kept here for reuse in the iDFlakies eval
+trained_thresholds = {} # threshold used per experiment, reused in cross-project eval
 
 # loop through each experiment and train/evaluate
 for exp_name, features in FEATURE_SETS.items():
@@ -135,11 +137,11 @@ for exp_name, features in FEATURE_SETS.items():
         ))
     ])
     pipe.fit(X_train, y_train)
-    trained_pipes[exp_name] = pipe   # save for cross-project eval below
+    trained_pipes[exp_name] = pipe
 
-    # for weaker experiments (smell_only, flakeflagger_static) we sweep thresholds
-    # and pick whichever gives the best f1 score
-    # for everything else just use the default 0.99
+    # for weaker experiments (smell_only, flakeflagger_static) thresholds are swept
+    # to find whichever gives the best f1 score
+    # all others use the default 0.99
     y_prob = pipe.predict_proba(X_test)[:, 1]
 
     if exp_name in ("flakeflagger_static", "smell_only"):
@@ -153,9 +155,10 @@ for exp_name, features in FEATURE_SETS.items():
     else:
         threshold = DEFAULT_THRESHOLD
 
+    trained_thresholds[exp_name] = threshold
     y_pred = (y_prob >= threshold).astype(int)
 
-    # calculate all our metrics
+    # calculate metrics
     precision = precision_score(y_test, y_pred, zero_division=0)
     recall = recall_score(y_test, y_pred, zero_division=0)
     f1 = f1_score(y_test, y_pred, zero_division=0)
@@ -204,8 +207,8 @@ for exp_name, features in FEATURE_SETS.items():
         "BrierScore": brier,
     })
 
-    # save the model — we only really care about the best leak-free one
-    if exp_name in ("flakeflagger_static", "static_plus_bounded"):
+    # save the best leak-free model
+    if exp_name == "static_v2_plus_dynamic":
         joblib.dump(pipe, "results/models/xgboost_model.pkl")
         print("Saved model to: results/models/xgboost_model.pkl")
 
@@ -226,7 +229,7 @@ for exp_name, features in FEATURE_SETS.items():
     except ValueError as e:
         print(f"Calibration curve skipped for {exp_name}: {e}")
 
-    # feature importance plot so we can see which features the model actually relied on
+    # feature importance plot
     plt.figure(figsize=(10, 6))
     plot_importance(pipe["clf"])
     plt.title(f"Feature Importance — {exp_name}")
@@ -245,8 +248,8 @@ print(metrics_df[["Experiment", "Precision", "Recall", "F1", "BrierScore", "Misc
 
 # cross-project evaluation using the iDFlakies dataset
 # the model was trained entirely on FlakeFlagger so iDFlakies is completely unseen
-# since iDFlakies only has confirmed flaky tests (no non-flaky), we can only measure recall here
-# basically asking: of all the tests we know are flaky, how many does our model catch?
+# iDFlakies only has confirmed flaky tests (no non-flaky), so only recall is measurable here
+# of all confirmed flaky tests, how many does the model catch?
 _idf_path = "data/processed/idflakies_features.csv"
 
 if not os.path.exists(_idf_path):
@@ -282,7 +285,7 @@ else:
         y_idf = idf_sub["IsFlaky"]  # all 1s
 
         y_idf_prob = trained_pipes[exp_name].predict_proba(X_idf)[:, 1]
-        y_idf_pred = (y_idf_prob >= DEFAULT_THRESHOLD).astype(int)
+        y_idf_pred = (y_idf_prob >= trained_thresholds[exp_name]).astype(int)
 
         tp_idf  = int((y_idf_pred == 1).sum())
         fn_idf  = int((y_idf_pred == 0).sum())
@@ -294,7 +297,7 @@ else:
         print(f"  Cross-project Recall : {recall_idf:.4f}")
 
         # break down recall by flakiness category (ID, OD, NOD, etc.)
-        # interesting to see if our model is better at catching certain types of flakiness
+        # per-category breakdown — shows which flakiness types the model catches better
         if "Category" in idf_sub.columns:
             cat_results = []
             for cat, grp in idf_sub.groupby("Category"):
