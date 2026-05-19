@@ -14,16 +14,15 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "features", "experiment_sets"))
 from feature_sets import FF_SMELL_COLS, build_feature_sets
 from sklearn.model_selection import StratifiedKFold
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import (brier_score_loss, precision_score, recall_score, f1_score, confusion_matrix)
+from sklearn.metrics import (precision_score, recall_score, f1_score, confusion_matrix)
 
-DEFAULT_THRESHOLD = 0.99
+DEFAULT_THRESHOLD = 0.80
 K = 5
 
 NUMERIC_KEYS = [
     "Precision", "Recall", "F1",
     "TrueNegatives", "FalsePositives", "FalseNegatives", "TruePositives",
-    "MisclassificationCost", "BrierScore",
+    "MisclassificationCost",
 ]
 
 def make_xgb(imbalance_weight, n_estimators=300, random_state=20):
@@ -77,11 +76,6 @@ def run_fold(exp_name, X_tr, X_te, y_tr, y_te):
     conf_matrix                  = confusion_matrix(y_te, predicted_labels)
     true_neg, false_pos, false_neg, true_pos = conf_matrix.ravel()
 
-    cal_model = CalibratedClassifierCV(make_xgb(class_weight, n_estimators=180, random_state=21),
-                                       method="sigmoid", cv=3)
-    cal_model.fit(X_tr, y_tr)
-    cal_prob = cal_model.predict_proba(X_te)[:, 1]
-
     return {
         "Threshold":             threshold,
         "Precision":             precision_score(y_te, predicted_labels, zero_division=0),
@@ -91,9 +85,26 @@ def run_fold(exp_name, X_tr, X_te, y_tr, y_te):
         "FalsePositives":        int(false_pos),
         "FalseNegatives":        int(false_neg),
         "TruePositives":         int(true_pos),
-        "MisclassificationCost": false_pos + 2 * false_neg,
-        "BrierScore":            brier_score_loss(y_te, cal_prob),
+        "MisclassificationCost": false_pos + 2 * false_neg, # equal cost is FP + FN but FN i put as 2x as costly here
     }
+
+def _print_table(headers, rows):
+    col_widths = [
+        max(len(headers[i]), max((len(row[i]) for row in rows), default=0))
+        for i in range(len(headers))
+    ]
+    top = "┌" + "┬".join("─" * (w + 2) for w in col_widths) + "┐"
+    mid = "├" + "┼".join("─" * (w + 2) for w in col_widths) + "┤"
+    bot = "└" + "┴".join("─" * (w + 2) for w in col_widths) + "┘"
+    def fmt_row(cells):
+        return "│ " + " │ ".join(c.ljust(w) for c, w in zip(cells, col_widths)) + " │"
+    print(top)
+    print(fmt_row(headers))
+    print(mid)
+    for row in rows:
+        print(fmt_row(row))
+    print(bot)
+
 
 # generating and saving the plots (in the results)
 def save_plots(exp_name, final_model, X_full, features):
@@ -143,7 +154,6 @@ def cross_project_eval(trained_models, trained_thresholds, FEATURE_SETS):
         false_negatives       = int((idflakies_predictions == 0).sum())
         cross_project_recall  = true_positives / len(idflakies_labels) if len(idflakies_labels) > 0 else 0.0
 
-        print(f"  {exp_name:<30} recall={cross_project_recall:.4f}  ({true_positives}/{len(idflakies_labels)} caught)")
         cross_project_results.append({
             "Experiment":       exp_name,
             "iDFlakies_N":      len(idflakies_labels),
@@ -154,6 +164,18 @@ def cross_project_eval(trained_models, trained_thresholds, FEATURE_SETS):
 
     if cross_project_results:
         pd.DataFrame(cross_project_results).to_csv("results/tables/cross_project_metrics.csv", index=False)
+
+        rows = []
+        for r in cross_project_results:
+            row = [
+                r["Experiment"],
+                str(r["iDFlakies_N"]),
+                f"{r['iDFlakies_Recall']:.4f}",
+                f"{r['iDFlakies_TP']}/{r['iDFlakies_N']}",
+            ]
+            rows.append(row)
+
+        _print_table(["Experiment", "N", "Recall", "Caught"], rows)
 
 
 # --- main --- #
@@ -218,20 +240,23 @@ for exp_name, features in FEATURE_SETS.items():
         "TruePositives":             int(round(fold_avg["TruePositives"])),
         "MisclassificationCost":     round(fold_avg["MisclassificationCost"], 1),
         "MisclassificationCost_Std": round(fold_std_devs["MisclassificationCost"], 1),
-        "BrierScore":                round(fold_avg["BrierScore"], 6),
-        "BrierScore_Std":            round(fold_std_devs["BrierScore"], 6),
     })
 
 pd.DataFrame(experiment_metrics).to_csv("results/tables/model_metrics.csv", index=False)
 
 print(f"\n--------- Results (5-fold cross-validation, mean ± std) ---------\n")
-for experiment_row in experiment_metrics:
-    print(f"\n  {experiment_row['Experiment']}")
-    print(f"    Precision : {experiment_row['Precision']:.4f} ± {experiment_row['Precision_Std']:.4f}")
-    print(f"    Recall    : {experiment_row['Recall']:.4f} ± {experiment_row['Recall_Std']:.4f}")
-    print(f"    F1        : {experiment_row['F1']:.4f} ± {experiment_row['F1_Std']:.4f}")
-    print(f"    Brier     : {experiment_row['BrierScore']:.6f} ± {experiment_row['BrierScore_Std']:.6f}")
-    print(f"    Misc Cost : {experiment_row['MisclassificationCost']:.1f} ± {experiment_row['MisclassificationCost_Std']:.1f}")
+rows = []
+for r in experiment_metrics:
+    row = [
+        r["Experiment"],
+        f"{r['Precision']:.4f} ± {r['Precision_Std']:.4f}",
+        f"{r['Recall']:.4f} ± {r['Recall_Std']:.4f}",
+        f"{r['F1']:.4f} ± {r['F1_Std']:.4f}",
+        f"{r['MisclassificationCost']:.1f} ± {r['MisclassificationCost_Std']:.1f}",
+    ]
+    rows.append(row)
+
+_print_table(["Experiment", "Precision", "Recall", "F1", "Misc Cost"], rows)
 
 cross_project_eval(trained_models, trained_thresholds, FEATURE_SETS)
 
