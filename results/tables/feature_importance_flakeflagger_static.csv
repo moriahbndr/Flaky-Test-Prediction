@@ -1,0 +1,11 @@
+Feature,Importance
+indirect_testing,0.17366965
+test_length,0.14091165
+eager_test,0.12523226
+mystery_guest,0.12137896
+conditional_test_logic,0.10858753
+num_asserts,0.10609099
+assertion_roulette,0.07926995
+resource_optimism,0.05839075
+fire_and_forget,0.053517368
+test_run_war,0.032950796

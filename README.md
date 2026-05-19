@@ -66,6 +66,22 @@ packages.txt  (lists all packages needed, install these during setup)
 
 # ---------------------------------------------------------------------------------------
 
+#### FEATURE EXTRACTION PIPELINE ####
+
+the feature extraction pipeline is made up of three build scripts that each take raw data as input
+and output a processed CSV that model_training.py then reads in
+
+    flakeflagger_results.csv  →  build_flakeflagger.py  →  data/processed/full_features.csv
+    GitHub (Java source)      →  build_smells.py        →  data/processed/flakeflagger_features.csv
+    idFlakies_dataset.csv     →  build_idflakies.py     →  data/processed/idflakies_features.csv
+                                                                        |
+                                                                        v
+                                                             model_training.py  →  results/
+
+all three steps run automatically when main.py is executed
+
+# ---------------------------------------------------------------------------------------
+
 #### RUNNING THE PROJECT ####
 
 run main.py from the project root and it handles everything in order:
@@ -113,7 +129,7 @@ iDFlakies
 ---------------------------------------------------------------------------------------
 
 #### STATIC FEATURES ####
-- FunctionNameLength
+- FunctionNameLength 
 - ClassNameLength
 - PackageLength
 - FunctionWordCount
@@ -131,7 +147,7 @@ iDFlakies
 - TimeOrRandomInClass
 - NetworkInClass
 - FileIOInClass
-- DatabaseInClass
+- DatabaseInClass 
 - UIBrowserInClass
 - NetworkInPackage
 - FileIOInPackage
@@ -151,7 +167,7 @@ iDFlakies
 - AnyFailures
 - AnyPassingRuns
 - BothPassAndFail
-- AlwaysFails
+- NeverPassed
 - FailOnFirstRun
 - EarlyFailure
 - ExceptionDiversityRatio
@@ -173,9 +189,8 @@ iDFlakies
 #### EXPERIMENTS ####
 - flakeflagger_raw          — uses raw run history columns (leaky, upper bound baseline)
 - smell_only                — test smell features only
-- static_v2                 — name-based static features only, no run history
-- static_v2_plus_dynamic    — static features + derived run stats
-- flakeflagger_static       — smell features + churn (FlakeFlagger paper's approach)
+- static                    — name-based static features only, no run history
+- static_plus_dynamic       — static features + derived run stats
 
 #### MODEL OUTPUTS ####
 - Precision
