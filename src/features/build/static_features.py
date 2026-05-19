@@ -5,9 +5,15 @@
 # To add or change a keyword category, edit _KW here — both pipelines pick it up automatically.
 ###############################################################################################################
 
-def _has_any(text, words):
+# private function to be used to check certain words in a string
+def _contains_keyword(text, words):
     t = text.lower()
     return int(any(w in t for w in words))
+
+# keyword dictonary
+# I was able to find some categories through research on what may lead to flaky tests
+# https://mir.cs.illinois.edu/lamyaa/publications/fse14.pdf
+# I have added all similar keywords that fit those categories and more 
 
 _KW = {
     "sleep_wait":  ["sleep", "wait", "delay", "timeout"],
@@ -18,15 +24,12 @@ _KW = {
     "database":    ["database", "db", "sql", "query", "transaction", "persist", "dao", "repository"],
     "ui_browser":  ["ui", "browser", "selenium", "screen", "click", "render", "dom", "page"],
     "retry_flake": ["retry", "flaky", "unstable", "intermittent", "eventually"],
+    # test order dependency: tests that pass/fail based on state left by other tests (Luo et al. 2014)
+    "test_order":  ["setup", "teardown", "before", "after", "init", "cleanup", "reset", "state", "fixture", "order"],
 }
 
 
 def apply_static_features(df):
-    """
-    Add all static name-derived features to df in-place.
-    Requires df to have 'Class' and 'Function' string columns.
-    Returns df.
-    """
     pkg = df["Class"].apply(lambda x: x.rsplit(".", 1)[0] if "." in x else "")
 
     # Name lengths
@@ -40,28 +43,30 @@ def apply_static_features(df):
     df["FunctionHasDigits"] = df["Function"].apply(lambda x: int(any(c.isdigit() for c in x)))
 
     # Keywords in function name
-    df["SleepOrWaitInFunction"]  = df["Function"].apply(lambda x: _has_any(x, _KW["sleep_wait"]))
-    df["AsyncInFunction"]        = df["Function"].apply(lambda x: _has_any(x, _KW["async"]))
-    df["TimeOrRandomInFunction"] = df["Function"].apply(lambda x: _has_any(x, _KW["time_random"]))
-    df["NetworkInFunction"]      = df["Function"].apply(lambda x: _has_any(x, _KW["network"]))
-    df["FileIOInFunction"]       = df["Function"].apply(lambda x: _has_any(x, _KW["fileio"]))
-    df["DatabaseInFunction"]     = df["Function"].apply(lambda x: _has_any(x, _KW["database"]))
-    df["UIBrowserInFunction"]    = df["Function"].apply(lambda x: _has_any(x, _KW["ui_browser"]))
-    df["RetryFlakeInFunction"]   = df["Function"].apply(lambda x: _has_any(x, _KW["retry_flake"]))
+    df["SleepOrWaitInFunction"]  = df["Function"].apply(lambda x: _contains_keyword(x, _KW["sleep_wait"]))
+    df["AsyncInFunction"]        = df["Function"].apply(lambda x: _contains_keyword(x, _KW["async"]))
+    df["TimeOrRandomInFunction"] = df["Function"].apply(lambda x: _contains_keyword(x, _KW["time_random"]))
+    df["NetworkInFunction"]      = df["Function"].apply(lambda x: _contains_keyword(x, _KW["network"]))
+    df["FileIOInFunction"]       = df["Function"].apply(lambda x: _contains_keyword(x, _KW["fileio"]))
+    df["DatabaseInFunction"]     = df["Function"].apply(lambda x: _contains_keyword(x, _KW["database"]))
+    df["UIBrowserInFunction"]    = df["Function"].apply(lambda x: _contains_keyword(x, _KW["ui_browser"]))
+    df["RetryFlakeInFunction"]   = df["Function"].apply(lambda x: _contains_keyword(x, _KW["retry_flake"]))
+    df["TestOrderInFunction"]    = df["Function"].apply(lambda x: _contains_keyword(x, _KW["test_order"]))
 
     # Keywords in class name
-    df["SleepOrWaitInClass"]  = df["Class"].apply(lambda x: _has_any(x, _KW["sleep_wait"]))
-    df["AsyncInClass"]        = df["Class"].apply(lambda x: _has_any(x, _KW["async"]))
-    df["TimeOrRandomInClass"] = df["Class"].apply(lambda x: _has_any(x, _KW["time_random"]))
-    df["NetworkInClass"]      = df["Class"].apply(lambda x: _has_any(x, _KW["network"]))
-    df["FileIOInClass"]       = df["Class"].apply(lambda x: _has_any(x, _KW["fileio"]))
-    df["DatabaseInClass"]     = df["Class"].apply(lambda x: _has_any(x, _KW["database"]))
-    df["UIBrowserInClass"]    = df["Class"].apply(lambda x: _has_any(x, _KW["ui_browser"]))
+    df["SleepOrWaitInClass"]  = df["Class"].apply(lambda x: _contains_keyword(x, _KW["sleep_wait"]))
+    df["AsyncInClass"]        = df["Class"].apply(lambda x: _contains_keyword(x, _KW["async"]))
+    df["TimeOrRandomInClass"] = df["Class"].apply(lambda x: _contains_keyword(x, _KW["time_random"]))
+    df["NetworkInClass"]      = df["Class"].apply(lambda x: _contains_keyword(x, _KW["network"]))
+    df["FileIOInClass"]       = df["Class"].apply(lambda x: _contains_keyword(x, _KW["fileio"]))
+    df["DatabaseInClass"]     = df["Class"].apply(lambda x: _contains_keyword(x, _KW["database"]))
+    df["UIBrowserInClass"]    = df["Class"].apply(lambda x: _contains_keyword(x, _KW["ui_browser"]))
+    df["TestOrderInClass"]    = df["Class"].apply(lambda x: _contains_keyword(x, _KW["test_order"]))
 
     # Keywords in package path (computed locally — not added as a df column)
-    df["NetworkInPackage"]   = pkg.apply(lambda x: _has_any(x, _KW["network"]))
-    df["FileIOInPackage"]    = pkg.apply(lambda x: _has_any(x, _KW["fileio"]))
-    df["DatabaseInPackage"]  = pkg.apply(lambda x: _has_any(x, _KW["database"]))
-    df["UIBrowserInPackage"] = pkg.apply(lambda x: _has_any(x, _KW["ui_browser"]))
+    df["NetworkInPackage"]   = pkg.apply(lambda x: _contains_keyword(x, _KW["network"]))
+    df["FileIOInPackage"]    = pkg.apply(lambda x: _contains_keyword(x, _KW["fileio"]))
+    df["DatabaseInPackage"]  = pkg.apply(lambda x: _contains_keyword(x, _KW["database"]))
+    df["UIBrowserInPackage"] = pkg.apply(lambda x: _contains_keyword(x, _KW["ui_browser"]))
 
     return df

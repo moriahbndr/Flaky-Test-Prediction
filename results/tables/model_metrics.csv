@@ -1,6 +1,5 @@
-Experiment,Threshold,Precision,Recall,F1,TrueNegatives,FalsePositives,FalseNegatives,TruePositives,MisclassificationCost,BrierScore
-flakeflagger_raw,0.99,1.0,1.0,1.0,5358,0,0,203,0,1.105685188158546e-05
-static_v2,0.99,1.0,0.12807881773399016,0.22707423580786026,5358,0,177,26,354,0.023676934769455763
-static_v2_plus_dynamic,0.99,1.0,1.0,1.0,5358,0,0,203,0,9.048788958195801e-07
-smell_only,0.8,0.1655773420479303,0.37438423645320196,0.229607250755287,4975,383,127,76,637,0.03334751371877033
-flakeflagger_static,0.8,0.1655773420479303,0.37438423645320196,0.229607250755287,4975,383,127,76,637,0.03334751371877033
+Experiment,Threshold,Precision,Precision_Std,Recall,Recall_Std,F1,F1_Std,TrueNegatives,FalsePositives,FalseNegatives,TruePositives,MisclassificationCost,MisclassificationCost_Std,BrierScore,BrierScore_Std
+static,0.99,0.9877,0.0151,0.1763,0.0179,0.2988,0.0251,4286,0,134,29,267.6,5.7,0.028515,0.000459
+static_plus_dynamic,0.99,1.0,0.0,1.0,0.0,1.0,0.0,4287,0,0,162,0.0,0.0,1e-06,0.0
+flakeflagger_raw,0.99,1.0,0.0,0.9963,0.0049,0.9981,0.0025,4287,0,1,162,1.2,1.6,0.000126,0.000193
+smell_only,0.75,0.1717,0.0116,0.4316,0.0228,0.2456,0.0145,3948,339,92,70,523.0,23.6,0.034407,0.000129

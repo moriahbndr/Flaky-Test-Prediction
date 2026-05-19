@@ -1,18 +1,16 @@
-###############################################################################################################
-# Pipeline entry point — runs the full project in order:
-#   1. src/features/build/build_flakeflagger.py — extract static + lightweight dynamic features
-#   2. src/features/build/build_smells.py       — fetch Java source and extract test-smell features (smell_only baseline)
-#   3. src/features/build/build_idflakies.py    — extract static features from iDFlakies
-#   4. src/model_training.py                    — train all experiments and compare against smell_only baseline
+# runs all the scripts in order so nothing has to be run manually
+#   1. build_flakeflagger.py - pulls out the static and run-based features
+#   2. build_smells.py       - grabs the test smell features (needed for the baseline)
+#   3. build_idflakies.py    - static features from iDFlakies for cross-project testing
+#   4. model_training.py     - trains everything and saves the results
 #
-# Run from the project root:
-#   python main.py
-###############################################################################################################
+# just run: python main.py
 
 import runpy
 import sys
 import os
 
+# (name to print, path to the script)
 STEPS = [
     ("Feature extraction (FlakeFlagger)", "src/features/build/build_flakeflagger.py"),
     ("Smell feature extraction",          "src/features/build/build_smells.py"),
@@ -21,10 +19,7 @@ STEPS = [
 ]
 
 def run_step(label, path):
-    print(f"\n{'#'*60}")
-    print(f"  STEP: {label}")
-    print(f"  FILE: {path}")
-    print(f"{'#'*60}\n")
+    print(f"\n--- {label} ({path}) ---")
     runpy.run_path(path, run_name="__main__")
 
 if __name__ == "__main__":
@@ -35,11 +30,9 @@ if __name__ == "__main__":
             run_step(label, path)
         except Exception as e:
             print(f"\n[ERROR] {label} failed: {e}")
-            print("Fix the error above and re-run main.py.")
+            print("fix whatever broke above and try running this again")
             sys.exit(1)
 
-    print(f"\n{'#'*60}")
-    print("  Pipeline complete.")
-    print("  Results saved to: results/tables/model_metrics.csv")
-    print("  Cross-project results: results/tables/cross_project_metrics.csv")
-    print(f"{'#'*60}\n")
+    print("\n--- pipeline complete ---")
+    print("  results/tables/model_metrics.csv")
+    print("  results/tables/cross_project_metrics.csv")

@@ -1,7 +1,10 @@
 # used this notebook as a starting point for the xgboost setup:
 # https://github.com/liannewriting/YouTube-videos-public/blob/main/xgboost-python-tutorial-example/xgboost_python.ipynb
+# for k-fold as reccomended during last stand-up meeting : https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.StratifiedKFold.html
+# chose stratified due to the lack of ordering in dataset and having much more flaky vs non-flaky (imbalanced)
 
 import pandas as pd
+import numpy as np
 from xgboost import XGBClassifier, plot_importance
 import joblib
 import os
@@ -9,273 +12,231 @@ import sys
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "features", "experiment_sets"))
-from feature_sets import FF_SMELL_COLS, FF_CHURN_COLS, build_feature_sets
-
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.calibration import CalibratedClassifierCV, calibration_curve
+from feature_sets import FF_SMELL_COLS, build_feature_sets
+from sklearn.model_selection import StratifiedKFold
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (brier_score_loss, precision_score, recall_score, f1_score, confusion_matrix)
 
-
-# load the processed dataset that build_flakeflagger.py created
-df = pd.read_csv("data/processed/full_features.csv")
-
-# if build_smells.py has been run, pull in the smell features and merge them in
-ff_path = "data/processed/flakeflagger_features.csv"
-if os.path.exists(ff_path):
-    ff_df = pd.read_csv(ff_path)
-    df = df.merge(ff_df, on=["Project", "Test"], how="left")
-    print(f"Merged FlakeFlagger features from: {ff_path}")
-
-target = "IsFlaky"
-ignore_cols = ["Project", "Test", target]
-
-# experiments are defined in src/features/feature_sets.py
-# smell_only and flakeflagger_static are only included when build_smells.py has been run first
-available_smell_cols = [c for c in FF_SMELL_COLS if c in df.columns and df[c].notna().any()]
-available_churn_cols = [c for c in FF_CHURN_COLS if c in df.columns and df[c].notna().any()]
-FEATURE_SETS = build_feature_sets(available_smell_cols, available_churn_cols)
-
-if available_smell_cols:
-    print(f"Smell features available ({len(available_smell_cols)}) — smell_only baseline enabled.")
-else:
-    print("No smell features found — run src/features/build_smells.py first.")
-print("Dataset shape:", df.shape)
-
-# split the data 75/25 — all experiments use the exact same split so results are comparable
-# model is only trained on FlakeFlagger data here, iDFlakies comes in later for cross-project eval
-y = df[target]
-X_full = df.drop(columns=ignore_cols)
-
-X_train_full, X_test_full, y_train, y_test = train_test_split(
-    X_full, y, test_size=0.25, stratify=y, random_state=7
-)
-
-# dataset is pretty imbalanced (way more non-flaky tests than flaky ones)
-# scale_pos_weight helps the model not just predict everything as non-flaky
-flaky_num = y_train.sum()
-not_flaky_num = len(y_train) - flaky_num
-imbalance_weight = not_flaky_num / flaky_num if flaky_num > 0 else 1.0
-
-# 0.99 is pretty aggressive but the leaky experiments need it to avoid too many false positives
-# smell_only and flakeflagger_static use a swept threshold instead since their signal is weaker
 DEFAULT_THRESHOLD = 0.99
+K = 5
 
-os.makedirs("results/tables", exist_ok=True)
-os.makedirs("results/models", exist_ok=True)
-os.makedirs("results/figures", exist_ok=True)
+NUMERIC_KEYS = [
+    "Precision", "Recall", "F1",
+    "TrueNegatives", "FalsePositives", "FalseNegatives", "TruePositives",
+    "MisclassificationCost", "BrierScore",
+]
 
-all_metrics = []
-trained_pipes = {}      # each trained model is kept here for reuse in the iDFlakies eval
-trained_thresholds = {} # threshold used per experiment, reused in cross-project eval
+def make_xgb(imbalance_weight, n_estimators=300, random_state=20):
+    return XGBClassifier(
+        objective="binary:logistic",
+        eval_metric="logloss",
+        n_estimators=n_estimators,
+        max_depth=8,            # increasing - found better results as i increased the depth, not much changes from 8 - 10 but significant from 6 - 8
+        learning_rate=0.07,
+        subsample=0.75,
+        colsample_bytree=0.75,
+        min_child_weight=3,
+        scale_pos_weight=imbalance_weight,
+        random_state=random_state,
+    )
 
-# loop through each experiment and train/evaluate
-for exp_name, features in FEATURE_SETS.items():
-    print(f"\n{'='*50}")
-    print(f"Experiment: {exp_name}")
-    print(f"{'='*50}")
+# all relevant features, data, and sets loaded 
+def load_data():
+    df = pd.read_csv("data/processed/full_features.csv")
+    ff_path = "data/processed/flakeflagger_features.csv"
+    if os.path.exists(ff_path):
+        df = df.merge(pd.read_csv(ff_path), on=["Project", "Test"], how="left")
 
-    X_train = X_train_full[features]
-    X_test = X_test_full[features]
+    smell_cols   = [c for c in FF_SMELL_COLS if c in df.columns and df[c].notna().any()]
+    FEATURE_SETS = build_feature_sets(smell_cols)
+    y            = df["IsFlaky"]    #flaky labels
+    X_full       = df.drop(columns=["Project", "Test", "IsFlaky"])  # features df
+    return df, smell_cols, FEATURE_SETS, y, X_full
 
-    # build and train the model
-    pipe = Pipeline([
-        ("clf", XGBClassifier(
-            objective="binary:logistic",
-            eval_metric="logloss",
-            n_estimators=250,
-            max_depth=6,
-            learning_rate=0.07,
-            subsample=0.75,
-            colsample_bytree=0.75,
-            scale_pos_weight=imbalance_weight,
-            random_state=20
-        ))
-    ])
-    pipe.fit(X_train, y_train)
-    trained_pipes[exp_name] = pipe
 
-    # for weaker experiments (smell_only, flakeflagger_static) thresholds are swept
-    # to find whichever gives the best f1 score
-    # all others use the default 0.99
-    y_prob = pipe.predict_proba(X_test)[:, 1]
+def run_fold(exp_name, X_tr, X_te, y_tr, y_te):
+    flaky_count  = y_tr.sum()
+    class_weight = (len(y_tr) - flaky_count) / flaky_count if flaky_count > 0 else 1.0
 
-    if exp_name in ("flakeflagger_static", "smell_only"):
-        best_f1, best_thresh = 0.0, 0.5
-        for t in [x / 100 for x in range(10, 95, 5)]:
-            _pred = (y_prob >= t).astype(int)
-            _f1   = f1_score(y_test, _pred, zero_division=0)
-            if _f1 > best_f1:
-                best_f1, best_thresh = _f1, t
-        threshold = best_thresh
+    model           = make_xgb(class_weight)
+    model.fit(X_tr, y_tr)
+    predicted_probs = model.predict_proba(X_te)[:, 1]
+
+    if exp_name == "smell_only":
+        best_f1_score, best_threshold = 0.0, 0.5
+        for step in range(10, 95, 5):
+            candidate_threshold = step / 100
+            fold_f1 = f1_score(y_te, (predicted_probs >= candidate_threshold).astype(int), zero_division=0)
+            if fold_f1 > best_f1_score:
+                best_f1_score, best_threshold = fold_f1, candidate_threshold
+        threshold = best_threshold
     else:
         threshold = DEFAULT_THRESHOLD
 
-    trained_thresholds[exp_name] = threshold
-    y_pred = (y_prob >= threshold).astype(int)
+    predicted_labels             = (predicted_probs >= threshold).astype(int)
+    conf_matrix                  = confusion_matrix(y_te, predicted_labels)
+    true_neg, false_pos, false_neg, true_pos = conf_matrix.ravel()
 
-    # calculate metrics
-    precision = precision_score(y_test, y_pred, zero_division=0)
-    recall = recall_score(y_test, y_pred, zero_division=0)
-    f1 = f1_score(y_test, y_pred, zero_division=0)
-    cm = confusion_matrix(y_test, y_pred)
-    tn = cm[0, 0]
-    fp = cm[0, 1]
-    fn = cm[1, 0]
-    tp = cm[1, 1]
-    # missing a flaky test costs twice as much as a false alarm
-    misclassification_cost = (1 * fp) + (2 * fn)
+    cal_model = CalibratedClassifierCV(make_xgb(class_weight, n_estimators=180, random_state=21),
+                                       method="sigmoid", cv=3)
+    cal_model.fit(X_tr, y_tr)
+    cal_prob = cal_model.predict_proba(X_te)[:, 1]
 
-    print(f"Threshold: {threshold}")
-    print(f"Precision: {precision}  Recall: {recall}  F1: {f1}")
-    print(f"Confusion Matrix:\n{cm}")
-    print(f"Misclassification Cost: {misclassification_cost}")
+    return {
+        "Threshold":             threshold,
+        "Precision":             precision_score(y_te, predicted_labels, zero_division=0),
+        "Recall":                recall_score(y_te, predicted_labels, zero_division=0),
+        "F1":                    f1_score(y_te, predicted_labels, zero_division=0),
+        "TrueNegatives":         int(true_neg),
+        "FalsePositives":        int(false_pos),
+        "FalseNegatives":        int(false_neg),
+        "TruePositives":         int(true_pos),
+        "MisclassificationCost": false_pos + 2 * false_neg,
+        "BrierScore":            brier_score_loss(y_te, cal_prob),
+    }
 
-    # train a second calibrated version just to get the brier score and calibration curve
-    xgb_cal = XGBClassifier(
-        objective="binary:logistic",
-        eval_metric="logloss",
-        n_estimators=180,
-        max_depth=6,
-        learning_rate=0.07,
-        subsample=0.85,
-        colsample_bytree=0.75,
-        scale_pos_weight=imbalance_weight,
-        random_state=21
-    )
-    cal_model = CalibratedClassifierCV(xgb_cal, method="sigmoid", cv=3)
-    cal_model.fit(X_train, y_train)
-    cal_prob = cal_model.predict_proba(X_test)[:, 1]
-    brier = brier_score_loss(y_test, cal_prob)
-    print(f"Brier Score: {brier:.6f}")
-
-    all_metrics.append({
-        "Experiment": exp_name,
-        "Threshold": threshold,
-        "Precision": precision,
-        "Recall": recall,
-        "F1": f1,
-        "TrueNegatives": tn,
-        "FalsePositives": fp,
-        "FalseNegatives": fn,
-        "TruePositives": tp,
-        "MisclassificationCost": misclassification_cost,
-        "BrierScore": brier,
-    })
-
-    # save the best leak-free model
-    if exp_name == "static_v2_plus_dynamic":
-        joblib.dump(pipe, "results/models/xgboost_model.pkl")
-        print("Saved model to: results/models/xgboost_model.pkl")
-
-    # calibration curve — shows how well the predicted probabilities match actual outcomes
-    try:
-        frac_pos, mean_pred = calibration_curve(y_test, cal_prob, n_bins=10)
-        plt.figure(figsize=(6, 6))
-        plt.plot(mean_pred, frac_pos, marker="o", label=f"Calibrated XGBoost")
-        plt.plot([0, 1], [0, 1], linestyle="--", label="Perfect calibration")
-        plt.xlabel("Probability Predicted")
-        plt.ylabel("Frequency Observed")
-        plt.title(f"Calibration Curve — {exp_name}")
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(f"results/figures/calibration_curve_{exp_name}.png")
-        plt.close()
-        print(f"Saved: results/figures/calibration_curve_{exp_name}.png")
-    except ValueError as e:
-        print(f"Calibration curve skipped for {exp_name}: {e}")
-
-    # feature importance plot
+# generating and saving the plots (in the results)
+def save_plots(exp_name, final_model, X_full, features):
     plt.figure(figsize=(10, 6))
-    plot_importance(pipe["clf"])
+    plot_importance(final_model)
     plt.title(f"Feature Importance — {exp_name}")
     plt.tight_layout()
     plt.savefig(f"results/figures/xgb_feature_importance_{exp_name}.png")
     plt.close()
-    print(f"Saved: results/figures/xgb_feature_importance_{exp_name}.png")
+
+    pd.DataFrame({
+        "Feature":    X_full[features].columns.tolist(),
+        "Importance": final_model.feature_importances_,
+    }).sort_values("Importance", ascending=False).reset_index(drop=True).to_csv(
+        f"results/tables/feature_importance_{exp_name}.csv", index=False
+    )
 
 
-# save all the experiment results to a csv
-metrics_df = pd.DataFrame(all_metrics)
-metrics_df.to_csv("results/tables/model_metrics.csv", index=False)
-print("\nSaved all experiment metrics to: results/tables/model_metrics.csv")
-print(metrics_df[["Experiment", "Precision", "Recall", "F1", "BrierScore", "MisclassificationCost"]].to_string(index=False))
+# testing if the model can now work on tests it hassnt been trained on / never ecnountered
+# also measuring generalization, whether the model was able to learn patterns or just momorized
+def cross_project_eval(trained_models, trained_thresholds, FEATURE_SETS):
+    idflakies_csv_path = "data/processed/idflakies_features.csv"
+    if not os.path.exists(idflakies_csv_path):
+        print(f"\n[Cross-project] iDFlakies features not found — run build_idflakies.py first.")
+        return
 
+    print(f"\n--------- Cross-project Generalization (iDFlakies) ---------")
+    idflakies_df         = pd.read_csv(idflakies_csv_path)
+    static_experiments   = ["static", "static_plus_dynamic", "smell_only"]
+    eligible_experiments = [
+        e for e in static_experiments
+        if e in trained_models and all(f in idflakies_df.columns for f in FEATURE_SETS.get(e, []))
+    ]
 
-# cross-project evaluation using the iDFlakies dataset
-# the model was trained entirely on FlakeFlagger so iDFlakies is completely unseen
-# iDFlakies only has confirmed flaky tests (no non-flaky), so only recall is measurable here
-# of all confirmed flaky tests, how many does the model catch?
-_idf_path = "data/processed/idflakies_features.csv"
-
-if not os.path.exists(_idf_path):
-    print(f"\n[Cross-project] iDFlakies features not found at {_idf_path}")
-    print("  Run src/features/build_idflakies.py first, then re-run model training.")
-else:
-    print(f"\n{'='*60}")
-    print("  Cross-project evaluation — iDFlakies (static features only)")
-    print(f"{'='*60}")
-
-    idf = pd.read_csv(_idf_path)
-
-    # only experiments that use static features can run on iDFlakies
-    # since iDFlakies has no run history columns, the dynamic experiments won't work here
-    _static_exps = ["static_v2", "static_v2_plus_dynamic", "smell_only", "flakeflagger_static"]
-    _static_only_exps = [e for e in _static_exps if e in trained_pipes
-                         and all(f in idf.columns for f in FEATURE_SETS.get(e, []))]
-
-    cross_metrics = []
-
-    for exp_name in _static_only_exps:
-        features = FEATURE_SETS[exp_name]
-        if not features:
-            continue
-
-        # drop any rows that are missing features
-        idf_sub = idf.dropna(subset=features)
-        if idf_sub.empty:
+    cross_project_results = []
+    for exp_name in eligible_experiments:
+        experiment_features = FEATURE_SETS[exp_name]
+        idflakies_subset    = idflakies_df.dropna(subset=experiment_features)
+        if idflakies_subset.empty:
             print(f"  [{exp_name}] No complete rows in iDFlakies — skipping.")
             continue
 
-        X_idf = idf_sub[features]
-        y_idf = idf_sub["IsFlaky"]  # all 1s
+        idflakies_labels      = idflakies_subset["IsFlaky"]
+        idflakies_predictions = (trained_models[exp_name].predict_proba(idflakies_subset[experiment_features])[:, 1]
+                                 >= trained_thresholds[exp_name]).astype(int)
+        true_positives        = int((idflakies_predictions == 1).sum())
+        false_negatives       = int((idflakies_predictions == 0).sum())
+        cross_project_recall  = true_positives / len(idflakies_labels) if len(idflakies_labels) > 0 else 0.0
 
-        y_idf_prob = trained_pipes[exp_name].predict_proba(X_idf)[:, 1]
-        y_idf_pred = (y_idf_prob >= trained_thresholds[exp_name]).astype(int)
-
-        tp_idf  = int((y_idf_pred == 1).sum())
-        fn_idf  = int((y_idf_pred == 0).sum())
-        recall_idf = tp_idf / len(y_idf) if len(y_idf) > 0 else 0.0
-
-        print(f"\n  Experiment : {exp_name}")
-        print(f"  iDFlakies tests evaluated : {len(y_idf)}")
-        print(f"  Caught (TP) : {tp_idf}   Missed (FN) : {fn_idf}")
-        print(f"  Cross-project Recall : {recall_idf:.4f}")
-
-        # break down recall by flakiness category (ID, OD, NOD, etc.)
-        # per-category breakdown — shows which flakiness types the model catches better
-        if "Category" in idf_sub.columns:
-            cat_results = []
-            for cat, grp in idf_sub.groupby("Category"):
-                g_prob = trained_pipes[exp_name].predict_proba(grp[features])[:, 1]
-                g_pred = (g_prob >= DEFAULT_THRESHOLD).astype(int)
-                g_recall = g_pred.mean()
-                cat_results.append({"Category": cat, "N": len(grp), "Recall": round(g_recall, 4)})
-            cat_df = pd.DataFrame(cat_results).sort_values("N", ascending=False)
-            print(f"\n  Per-category recall (top 10 by count):")
-            print(cat_df.head(10).to_string(index=False))
-
-        cross_metrics.append({
-            "Experiment":          exp_name,
-            "iDFlakies_N":         len(y_idf),
-            "iDFlakies_Recall":    round(recall_idf, 4),
-            "iDFlakies_TP":        tp_idf,
-            "iDFlakies_FN":        fn_idf,
+        print(f"  {exp_name:<30} recall={cross_project_recall:.4f}  ({true_positives}/{len(idflakies_labels)} caught)")
+        cross_project_results.append({
+            "Experiment":       exp_name,
+            "iDFlakies_N":      len(idflakies_labels),
+            "iDFlakies_Recall": round(cross_project_recall, 4),
+            "iDFlakies_TP":     true_positives,
+            "iDFlakies_FN":     false_negatives,
         })
 
-    if cross_metrics:
-        cross_df = pd.DataFrame(cross_metrics)
-        cross_path = "results/tables/cross_project_metrics.csv"
-        cross_df.to_csv(cross_path, index=False)
-        print(f"\nSaved cross-project metrics to: {cross_path}")
-        print(cross_df.to_string(index=False))
+    if cross_project_results:
+        pd.DataFrame(cross_project_results).to_csv("results/tables/cross_project_metrics.csv", index=False)
+
+
+# --- main --- #
+
+os.makedirs("results/tables",  exist_ok=True)
+os.makedirs("results/models",  exist_ok=True)
+os.makedirs("results/figures", exist_ok=True)
+
+df, smell_cols, FEATURE_SETS, y, X_full = load_data()
+stratified_kfold         = StratifiedKFold(n_splits=K, shuffle=True, random_state=7)
+full_dataset_class_weight = (len(y) - y.sum()) / y.sum() if y.sum() > 0 else 1.0
+
+print(f"\n--------- Flaky Test Prediction Pipeline ---------")
+print(f"Dataset : {df.shape[0]} tests, {df.shape[1]} columns")
+print(f"Smell features : {'enabled' if smell_cols else 'not found, run build_smells.py first'}")
+print(f"\nTraining {len(FEATURE_SETS)} experiments with {K}-fold stratified cross-validation...")
+
+experiment_metrics = []
+trained_models     = {}
+trained_thresholds = {}
+
+for exp_name, features in FEATURE_SETS.items():
+    print(f"  {exp_name}...")
+
+    fold_metrics = []
+
+    for train_indices, test_indices in stratified_kfold.split(X_full, y):
+        fold_result = run_fold(
+            exp_name,
+            X_full.iloc[train_indices][features], X_full.iloc[test_indices][features],
+            y.iloc[train_indices],                y.iloc[test_indices],
+        )
+        fold_metrics.append(fold_result)
+
+    fold_avg    = {k: np.mean([r[k] for r in fold_metrics]) for k in NUMERIC_KEYS}
+    fold_std_devs     = {k: np.std( [r[k] for r in fold_metrics]) for k in NUMERIC_KEYS}
+    avg_threshold = np.mean([r["Threshold"] for r in fold_metrics])
+
+    trained_thresholds[exp_name] = avg_threshold
+
+    full_trained_model = make_xgb(full_dataset_class_weight)
+    full_trained_model.fit(X_full[features], y)
+    trained_models[exp_name] = full_trained_model
+
+    if exp_name == "static_plus_dynamic":
+        joblib.dump(full_trained_model, "results/models/xgboost_model.pkl")
+
+    save_plots(exp_name, full_trained_model, X_full, features)
+
+    experiment_metrics.append({
+        "Experiment":                exp_name,
+        "Threshold":                 round(avg_threshold, 2),
+        "Precision":                 round(fold_avg["Precision"], 4),
+        "Precision_Std":             round(fold_std_devs["Precision"], 4),
+        "Recall":                    round(fold_avg["Recall"], 4),
+        "Recall_Std":                round(fold_std_devs["Recall"], 4),
+        "F1":                        round(fold_avg["F1"], 4),
+        "F1_Std":                    round(fold_std_devs["F1"], 4),
+        "TrueNegatives":             int(round(fold_avg["TrueNegatives"])),
+        "FalsePositives":            int(round(fold_avg["FalsePositives"])),
+        "FalseNegatives":            int(round(fold_avg["FalseNegatives"])),
+        "TruePositives":             int(round(fold_avg["TruePositives"])),
+        "MisclassificationCost":     round(fold_avg["MisclassificationCost"], 1),
+        "MisclassificationCost_Std": round(fold_std_devs["MisclassificationCost"], 1),
+        "BrierScore":                round(fold_avg["BrierScore"], 6),
+        "BrierScore_Std":            round(fold_std_devs["BrierScore"], 6),
+    })
+
+pd.DataFrame(experiment_metrics).to_csv("results/tables/model_metrics.csv", index=False)
+
+print(f"\n--------- Results (5-fold cross-validation, mean ± std) ---------\n")
+for experiment_row in experiment_metrics:
+    print(f"\n  {experiment_row['Experiment']}")
+    print(f"    Precision : {experiment_row['Precision']:.4f} ± {experiment_row['Precision_Std']:.4f}")
+    print(f"    Recall    : {experiment_row['Recall']:.4f} ± {experiment_row['Recall_Std']:.4f}")
+    print(f"    F1        : {experiment_row['F1']:.4f} ± {experiment_row['F1_Std']:.4f}")
+    print(f"    Brier     : {experiment_row['BrierScore']:.6f} ± {experiment_row['BrierScore_Std']:.6f}")
+    print(f"    Misc Cost : {experiment_row['MisclassificationCost']:.1f} ± {experiment_row['MisclassificationCost_Std']:.1f}")
+
+cross_project_eval(trained_models, trained_thresholds, FEATURE_SETS)
+
+print(f"\n--------- Saved ---------")
+print(f"  results/tables/model_metrics.csv")
+print(f"  results/tables/cross_project_metrics.csv")
+print(f"  results/models/xgboost_model.pkl")
+print(f"  results/figures/  (feature importance per experiment)")
