@@ -1,25 +1,16 @@
 #Virtual environment
 venv/
 .venv/
-
 #Local cache
 data/source_cache/
-
 #Cache (Python)
 __pycache__/
 *.pyc
 *.pyd
 *.pyo
-
 #Environment
 .env
-
-#Jupyter & VSCode
-.ipynb_checkpoints/
+#VSCode
 .vscode/
-
 #Mac system
 .DS_Store
-
-#Claude Code
-.claude/
