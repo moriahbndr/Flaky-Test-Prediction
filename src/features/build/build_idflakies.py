@@ -18,49 +18,55 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from static_features import apply_static_features
 
-df = pd.read_csv("data/input_data/idFlakies_dataset.csv")
 
-IDFLAKIES_TEST_COL = "Fully-Qualified Test Name (packageName.ClassName.methodName)"
-                                    
-# obtaining class, function and test names
-df["Class"]    = df[IDFLAKIES_TEST_COL].apply(lambda x: x.rsplit(".", 1)[0] if "." in str(x) else str(x))
-df["Function"] = df[IDFLAKIES_TEST_COL].apply(lambda x: x.rsplit(".", 1)[1] if "." in str(x) else "")
-df["Test"]     = df[IDFLAKIES_TEST_COL].astype(str)
+def main():
+    df = pd.read_csv("data/input_data/idFlakies_dataset.csv")
 
-# short project identifier from the GitHub URL: "owner-repo"
-df["Project"] = df["Project URL"].apply(
-    lambda url: "-".join(str(url).rstrip("/").split("/")[-2:]) if "/" in str(url) else str(url)
-)
+    IDFLAKIES_TEST_COL = "Fully-Qualified Test Name (packageName.ClassName.methodName)"
 
-# All iDFlakies entries are confirmed flaky
-df["IsFlaky"] = 1
+    # obtaining class, function and test names
+    df["Class"]    = df[IDFLAKIES_TEST_COL].apply(lambda x: x.rsplit(".", 1)[0] if "." in str(x) else str(x))
+    df["Function"] = df[IDFLAKIES_TEST_COL].apply(lambda x: x.rsplit(".", 1)[1] if "." in str(x) else "")
+    df["Test"]     = df[IDFLAKIES_TEST_COL].astype(str)
 
-apply_static_features(df)
+    # short project identifier from the GitHub URL: "owner-repo"
+    df["Project"] = df["Project URL"].apply(
+        lambda url: "-".join(str(url).rstrip("/").split("/")[-2:]) if "/" in str(url) else str(url)
+    )
 
-final_cols = [
-    "Project", "Test", "IsFlaky",
-    "Category",   # keep iDFlakies flakiness category for reference / subgroup analysis
+    # All iDFlakies entries are confirmed flaky
+    df["IsFlaky"] = 1
 
-    # Static — name lengths and structure
-    "FunctionNameLength", "FunctionWordCount", "FunctionHasDigits",
-    "ClassNameLength", "PackageLength",
+    apply_static_features(df)
 
-    # Static — keywords in function name
-    "SleepOrWaitInFunction", "AsyncInFunction", "TimeOrRandomInFunction",
-    "NetworkInFunction", "FileIOInFunction", "DatabaseInFunction",
-    "UIBrowserInFunction", "RetryFlakeInFunction", "TestOrderInFunction",
+    final_cols = [
+        "Project", "Test", "IsFlaky",
+        "Category",   # keep iDFlakies flakiness category for reference / subgroup analysis
 
-    # Static — keywords in class name
-    "SleepOrWaitInClass", "AsyncInClass", "TimeOrRandomInClass",
-    "NetworkInClass", "FileIOInClass", "DatabaseInClass", "UIBrowserInClass", "TestOrderInClass",
+        # Static — name lengths and structure
+        "FunctionNameLength", "FunctionWordCount", "FunctionHasDigits",
+        "ClassNameLength", "PackageLength",
 
-    # Static — keywords in package path
-    "NetworkInPackage", "FileIOInPackage", "DatabaseInPackage", "UIBrowserInPackage",
-]
+        # Static — keywords in function name
+        "SleepOrWaitInFunction", "AsyncInFunction", "TimeOrRandomInFunction",
+        "NetworkInFunction", "FileIOInFunction", "DatabaseInFunction",
+        "UIBrowserInFunction", "RetryFlakeInFunction", "TestOrderInFunction",
 
-df = df.dropna(subset=["Test", "Function"])[final_cols]
+        # Static — keywords in class name
+        "SleepOrWaitInClass", "AsyncInClass", "TimeOrRandomInClass",
+        "NetworkInClass", "FileIOInClass", "DatabaseInClass", "UIBrowserInClass", "TestOrderInClass",
 
-os.makedirs("data/processed", exist_ok=True)
-df.to_csv("data/processed/idflakies_features.csv", index=False)
+        # Static — keywords in package path
+        "NetworkInPackage", "FileIOInPackage", "DatabaseInPackage", "UIBrowserInPackage",
+    ]
 
-print("Saved to: data/processed/idflakies_features.csv")
+    df = df.dropna(subset=["Test", "Function"])[final_cols]
+
+    os.makedirs("data/processed", exist_ok=True)
+    df.to_csv("data/processed/idflakies_features.csv", index=False)
+
+    print("Saved to: data/processed/idflakies_features.csv")
+
+
+if __name__ == "__main__":
+    main()
