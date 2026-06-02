@@ -1,17 +1,9 @@
-# runs all the scripts in order so nothing has to be run manually
-#   1. build_flakeflagger.py - pulls out the static and run-based features
-#   2. build_smells.py       - grabs the test smell features (needed for the baseline)
-#   3. build_idflakies.py    - static features from iDFlakies for cross-project testing
-#   4. model_training.py     - trains everything and saves the results
-#
-# just run: python main.py
-
 import runpy
 import sys
 import os
 
-# (name to print, path to the script)
 STEPS = [
+    ("Label verification",               "src/label_verification.py"),
     ("Feature extraction (FlakeFlagger)", "src/features/build/build_flakeflagger.py"),
     ("Smell feature extraction",          "src/features/build/build_smells.py"),
     ("iDFlakies feature extraction",      "src/features/build/build_idflakies.py"),

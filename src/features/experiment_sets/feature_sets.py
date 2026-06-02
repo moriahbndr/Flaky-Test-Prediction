@@ -14,14 +14,13 @@ STATIC_COLS = [
 
 # to add a new dynamic feature, add its column name here
 DYNAMIC_COLS = [
-    "TotalRuns", "FailRatio", "PassRatio",
-    "AnyFailures", "AnyPassingRuns",
-    "BothPassAndFail", "NeverPassed",
-    "FailOnFirstRun", "EarlyFailure",
+    "TotalRuns",
+    "LogTotalRuns",
+    "FirstFailingRunID",
+    "FirstPassingRunID",
+    "EarlyFailure",
+    "FailOnFirstRun",
     "ExceptionDiversityRatio",
-    "FailPassOdds", "FailPassDiff", "AbsFailPassDiff",
-    "FlakinessBalance", "NeverFails",
-    "LogNumFailingRuns", "LogTotalRuns",
 ]
 
 FF_SMELL_COLS = [

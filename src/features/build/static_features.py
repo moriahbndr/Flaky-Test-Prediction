@@ -10,10 +10,10 @@ def _contains_keyword(text, words):
     t = text.lower()
     return int(any(w in t for w in words))
 
-# keyword dictonary
-# I was able to find some categories through research on what may lead to flaky tests
+# keyword dictionary
+# categories identified through research on what leads to flaky tests
 # https://mir.cs.illinois.edu/lamyaa/publications/fse14.pdf
-# I have added all similar keywords that fit those categories and more 
+# expanded with similar keywords per category
 
 _KW = {
     "sleep_wait":  ["sleep", "wait", "delay", "timeout"],

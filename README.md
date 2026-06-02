@@ -23,17 +23,17 @@ Datasets used for training are both FlakeFlagger and iDFlakies
     MAC or Linux
     - (python3 or python) -m venv venv
     - source venv/bin/activate
-    - pip install -r packages.txt
+    - pip install -r requirements.txt
 
     Windows
     - python -m venv venv
     - venv\Scripts\activate
-    - pip install -r packages.txt
+    - pip install -r requirements.txt
 
 * VSCode terminal on MAC example :  
     python3 -m venv venv
     source venv/bin/activate
-    pip install -r packages.txt
+    pip install -r requirements.txt
 
 # ---------------------------------------------------------------------------------------
 
@@ -62,7 +62,7 @@ src/
     model_training.py  (trains all experiments and runs cross-project evaluation on iDFlakies)
 
 main.py       (runs the full pipeline in order, just run this)
-packages.txt  (lists all packages needed, install these during setup)
+requirements.txt  (lists all packages needed, install these during setup)
 
 # ---------------------------------------------------------------------------------------
 
@@ -162,12 +162,7 @@ iDFlakies
 - FirstPassingRunID
 - UniqueFailingExceptionTypes
 - TotalRuns
-- FailRatio
-- PassRatio
-- AnyFailures
-- AnyPassingRuns
-- BothPassAndFail
-- NeverPassed
+- LogTotalRuns
 - FailOnFirstRun
 - EarlyFailure
 - ExceptionDiversityRatio
